@@ -1,0 +1,19 @@
+{
+  "name": "canvas-haptics",
+  "version": "0.1.0",
+  "description": "A macOS-only Obsidian plugin that provides haptic feedback for Canvas alignment.",
+  "main": "main.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "check": "tsc --noEmit --skipLibCheck",
+    "dev": "node esbuild.config.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "esbuild": "0.25.5",
+    "obsidian": "latest",
+    "typescript": "^5.8.3"
+  }
+}
