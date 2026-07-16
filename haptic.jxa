@@ -1,0 +1,13 @@
+ObjC.import("AppKit");
+
+function run(argv) {
+  const patternName = String(argv[0] || "generic");
+  const patterns = {
+    generic: $.NSHapticFeedbackPatternGeneric,
+    alignment: $.NSHapticFeedbackPatternAlignment,
+    level: $.NSHapticFeedbackPatternLevelChange,
+  };
+  const pattern = patterns[patternName] || patterns.generic;
+  $.NSHapticFeedbackManager.defaultPerformer
+    .performFeedbackPatternPerformanceTime(pattern, $.NSHapticFeedbackPerformanceTimeNow);
+}

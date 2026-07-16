@@ -1,0 +1,9 @@
+{
+  "id": "canvas-haptics",
+  "name": "Canvas Haptics",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Subtle macOS trackpad feedback when Canvas nodes align.",
+  "author": "Local prototype",
+  "isDesktopOnly": true
+}
