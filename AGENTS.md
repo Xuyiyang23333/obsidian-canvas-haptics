@@ -22,7 +22,7 @@ pnpm check
 pnpm build
 ```
 
-`pnpm check` runs TypeScript validation; `pnpm build` emits the readable `main.js` release bundle; `pnpm dev` watches and rebuilds during development. Copy the generated `main.js`, `manifest.json`, and `styles.css` into a test vault, enable **Canvas Haptics**, open a Canvas, drag nodes, and use **Settings → Canvas Haptics → Test**.
+`pnpm check` runs TypeScript validation; `pnpm build` emits the readable `main.js` release bundle; `pnpm dev` watches and rebuilds during development. Copy the generated `main.js`, `manifest.json`, and `styles.css` into a test vault, enable **Canvas Haptics**, open a Canvas, drag and resize nodes, and use **Settings → Canvas Haptics → Haptic preview**.
 
 ## Coding Style and Naming
 
@@ -30,7 +30,7 @@ Use two-space indentation, semicolons, double-quoted strings, and descriptive ca
 
 ## Testing Guidelines
 
-No automated behavior-test framework or coverage requirement is configured. Every behavior change should pass `pnpm check` and receive a manual Obsidian smoke test covering node dragging, horizontal and vertical alignment, tolerance changes, disabled feedback, helper-file creation, and plugin reload. Confirm that failures are logged without leaving the plugin unusable. Test on supported Apple Silicon macOS because the JXA bridge depends on AppKit haptic APIs; mobile support is intentionally excluded.
+No automated behavior-test framework or coverage requirement is configured. Every behavior change should pass `pnpm check` and receive a manual Obsidian smoke test covering node dragging, horizontal and vertical alignment, node resizing against matching widths and heights, tolerance changes, disabled feedback, helper-file creation, and plugin reload. Confirm that failures are logged without leaving the plugin unusable. Test on supported Apple Silicon macOS because the JXA bridge depends on AppKit haptic APIs; mobile support is intentionally excluded.
 
 ## Commits and Pull Requests
 

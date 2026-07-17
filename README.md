@@ -9,6 +9,8 @@ A macOS-only Obsidian plugin that gives a subtle trackpad pulse when a Canvas no
 - Detects dragging of `.canvas-node` elements.
 - Compares visible left, center, and right / top, center, and bottom edges.
 - Pulses once when a new alignment is entered.
+- Pulses once when resizing a node reaches another node's width or height.
+- Offers Generic, Alignment, and Level Change macOS haptic patterns, each with a settings-page preview button.
 - Uses the macOS-provided `osascript` runtime with an embedded AppKit JXA script. The script is released into the plugin folder on first load; no unsigned executable is installed.
 - Supports Apple Silicon macOS only. Mobile support is intentionally out of scope because the feature depends on MacBook trackpad hardware and AppKit haptics.
 
@@ -23,7 +25,7 @@ pnpm install
 pnpm build
 ```
 
-For local development, use `pnpm dev` and copy the generated `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/canvas-haptics/`. Enable the plugin in Obsidian and open Settings → Canvas Haptics → Test.
+For local development, use `pnpm dev` and copy the generated `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/canvas-haptics/`. Enable the plugin in Obsidian and open Settings → Canvas Haptics → Haptic preview.
 
 The production release contains `main.js`, `manifest.json`, and `styles.css`. The JXA source is embedded into `main.js`; on plugin load, it is written to the plugin directory as `haptic.jxa` for `/usr/bin/osascript` to execute.
 

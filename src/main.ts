@@ -14,6 +14,8 @@ const hapticScript = hapticScriptAsset as unknown as string;
 interface CanvasHapticsSettings {
   enabled: boolean;
   alignmentFeedback: boolean;
+  resizeFeedback: boolean;
+  hapticPattern: HapticPattern;
   tolerance: number;
   cooldown: number;
 }
@@ -31,11 +33,20 @@ interface Alignment {
   key: string;
 }
 
-type HapticPattern = "generic" | "alignment";
+interface DragState {
+  node: HTMLElement;
+  pointerId: number;
+  initialWidth: number;
+  initialHeight: number;
+}
+
+type HapticPattern = "generic" | "alignment" | "level";
 
 const DEFAULT_SETTINGS: CanvasHapticsSettings = {
   enabled: true,
   alignmentFeedback: true,
+  resizeFeedback: true,
+  hapticPattern: "alignment",
   tolerance: 8,
   cooldown: 120,
 };
@@ -45,8 +56,9 @@ const HAPTIC_SCRIPT_FILENAME = "haptic.jxa";
 class CanvasHapticsPlugin extends Plugin {
   settings: CanvasHapticsSettings = { ...DEFAULT_SETTINGS };
   private activeAlignments = new Set<string>();
+  private activeResizeAlignments = new Set<string>();
   private lastFeedbackAt = 0;
-  private dragState: { node: HTMLElement; pointerId: number } | null = null;
+  private dragState: DragState | null = null;
   private registeredCanvasRoots = new WeakSet<Element>();
   private hapticFailureShown = false;
 
@@ -88,10 +100,18 @@ class CanvasHapticsPlugin extends Plugin {
 
   private onPointerDown(event: PointerEvent): void {
     if (!this.settings.enabled || event.button !== 0) return;
-    const node = this.findCanvasNode(event.target);
+    const resizeHandle = this.findResizeHandle(event.target);
+    const node = this.findCanvasNode(event, Boolean(resizeHandle));
     if (!node) return;
-    this.dragState = { node, pointerId: event.pointerId };
+    const rect = node.getBoundingClientRect();
+    this.dragState = {
+      node,
+      pointerId: event.pointerId,
+      initialWidth: rect.width,
+      initialHeight: rect.height,
+    };
     this.activeAlignments.clear();
+    this.activeResizeAlignments.clear();
   }
 
   private onPointerMove(event: PointerEvent): void {
@@ -107,29 +127,67 @@ class CanvasHapticsPlugin extends Plugin {
     const currentKeys = new Set(alignments.map((alignment) => alignment.key));
     const enteredAlignment = alignments.find((alignment) => !this.activeAlignments.has(alignment.key));
     this.activeAlignments = currentKeys;
-    if (!enteredAlignment) return;
+
+    const isResizing = movingRect.width !== this.dragState.initialWidth || movingRect.height !== this.dragState.initialHeight;
+    const resizeAlignments = isResizing
+      ? findResizeAlignments(movingRect, candidates, this.settings.tolerance)
+      : [];
+    const currentResizeKeys = new Set(resizeAlignments.map((alignment) => alignment.key));
+    const enteredResizeAlignment = resizeAlignments.find((alignment) => !this.activeResizeAlignments.has(alignment.key));
+    this.activeResizeAlignments = currentResizeKeys;
+
+    const shouldPlayAlignment = Boolean(enteredAlignment && this.settings.alignmentFeedback);
+    const shouldPlayResize = Boolean(enteredResizeAlignment && this.settings.resizeFeedback);
+    if (!shouldPlayAlignment && !shouldPlayResize) return;
 
     const now = performance.now();
     if (now - this.lastFeedbackAt < this.settings.cooldown) return;
     this.lastFeedbackAt = now;
-    this.performHaptic("alignment");
+    this.performHaptic(this.settings.hapticPattern);
   }
 
   private endDrag(): void {
     this.dragState = null;
     this.activeAlignments.clear();
+    this.activeResizeAlignments.clear();
   }
 
-  private findCanvasNode(target: EventTarget | null): HTMLElement | null {
+  private findCanvasNode(event: PointerEvent, allowResizeHitTest: boolean): HTMLElement | null {
+    const { target } = event;
     if (!(target instanceof Element)) return null;
     const node = target.closest<HTMLElement>(".canvas-node");
-    if (!node || !node.closest(".canvas-wrapper, .canvas")) return null;
-    return node;
+    if (node?.closest(".canvas-wrapper, .canvas")) return node;
+    if (!allowResizeHitTest) return null;
+
+    const parentNode = target.closest<HTMLElement>(".canvas-node-resizer")?.closest<HTMLElement>(".canvas-node");
+    if (parentNode?.closest(".canvas-wrapper, .canvas")) return parentNode;
+
+    const padding = 12;
+    let nearestNode: HTMLElement | null = null;
+    let nearestArea = Number.POSITIVE_INFINITY;
+    document.querySelectorAll<HTMLElement>(".canvas-wrapper .canvas-node, .canvas .canvas-node").forEach((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const withinExpandedBounds = event.clientX >= rect.left - padding
+        && event.clientX <= rect.right + padding
+        && event.clientY >= rect.top - padding
+        && event.clientY <= rect.bottom + padding;
+      if (!withinExpandedBounds) return;
+
+      const area = rect.width * rect.height;
+      if (area < nearestArea) {
+        nearestArea = area;
+        nearestNode = candidate;
+      }
+    });
+
+    return nearestNode;
+  }
+
+  private findResizeHandle(target: EventTarget | null): Element | null {
+    return target instanceof Element ? target.closest(".canvas-node-resizer") : null;
   }
 
   private performHaptic(pattern: HapticPattern): void {
-    if (pattern === "alignment" && !this.settings.alignmentFeedback) return;
-
     let scriptPath: string;
     try {
       scriptPath = this.hapticScriptPath();
@@ -145,8 +203,8 @@ class CanvasHapticsPlugin extends Plugin {
     });
   }
 
-  performHapticForTest(): void {
-    this.performHaptic("generic");
+  performHapticForPreview(pattern: HapticPattern): void {
+    this.performHaptic(pattern);
   }
 
   private async ensureHapticScript(): Promise<void> {
@@ -228,6 +286,24 @@ export function findAlignments(moving: RectLike, nodes: Array<HTMLElement>, tole
   return matches;
 }
 
+export function findResizeAlignments(moving: RectLike, nodes: Array<HTMLElement>, tolerance: number): Alignment[] {
+  const matches: Alignment[] = [];
+
+  for (const [index, node] of nodes.entries()) {
+    const rect = node.getBoundingClientRect();
+    const nodeKey = node.dataset.nodeId || node.id || index;
+
+    if (Math.abs(moving.width - rect.width) <= tolerance) {
+      matches.push({ key: `${nodeKey}:width` });
+    }
+    if (Math.abs(moving.height - rect.height) <= tolerance) {
+      matches.push({ key: `${nodeKey}:height` });
+    }
+  }
+
+  return matches;
+}
+
 class CanvasHapticsSettingTab extends PluginSettingTab {
   constructor(app: CanvasHapticsPlugin["app"], private plugin: CanvasHapticsPlugin) {
     super(app, plugin);
@@ -258,6 +334,31 @@ class CanvasHapticsSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
+      .setName("Resize feedback")
+      .setDesc("Pulse once when a resized node reaches another node's width or height.")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.resizeFeedback)
+        .onChange(async (value) => {
+          this.plugin.settings.resizeFeedback = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Haptic type")
+      .setDesc("Choose the macOS feedback pattern used for alignment, resize, and preview feedback.")
+      .addDropdown((dropdown) => dropdown
+        .addOptions({
+          generic: "Generic",
+          alignment: "Alignment",
+          level: "Level change",
+        })
+        .setValue(this.plugin.settings.hapticPattern)
+        .onChange(async (value) => {
+          this.plugin.settings.hapticPattern = value as HapticPattern;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
       .setName("Alignment tolerance")
       .setDesc("Distance in screen pixels used to detect alignment.")
       .addSlider((slider) => slider
@@ -270,12 +371,25 @@ class CanvasHapticsSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName("Test feedback")
-      .setDesc("Call the macOS AppKit bridge once.")
-      .addButton((button) => button.setButtonText("Test").onClick(() => {
-        this.plugin.performHapticForTest();
-        new Notice("Canvas Haptics test requested");
-      }));
+      .setName("Haptic preview")
+      .setDesc("Play each macOS pattern to compare the available feedback effects.")
+      .setHeading();
+
+    const previews: Array<{ pattern: HapticPattern; name: string; description: string }> = [
+      { pattern: "generic", name: "Generic", description: "A general-purpose trackpad pulse." },
+      { pattern: "alignment", name: "Alignment", description: "A pattern intended for alignment feedback." },
+      { pattern: "level", name: "Level change", description: "A pattern intended to indicate a level change." },
+    ];
+
+    previews.forEach(({ pattern, name, description }) => {
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(description)
+        .addButton((button) => button.setButtonText("Play").onClick(() => {
+          this.plugin.performHapticForPreview(pattern);
+          new Notice(`${name} preview requested`);
+        }));
+    });
   }
 }
 

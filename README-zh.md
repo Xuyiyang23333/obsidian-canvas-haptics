@@ -7,8 +7,10 @@ Canvas Haptics 是一个仅支持 macOS 桌面版 Obsidian 的插件。当 Canva
 - 检测 Canvas 节点拖拽。
 - 检测左边缘、中心线、右边缘以及上边缘、中心线、下边缘对齐。
 - 每次进入新的对齐状态时触发一次反馈。
+- 缩放节点达到其他节点的宽度或高度时触发一次反馈。
 - 支持启用/禁用反馈和调整对齐容差。
-- 提供触觉反馈测试按钮。
+- 支持选择 macOS 触觉类型：通用、对齐和等级变化。
+- 提供三种触觉效果预览按钮。
 
 ## 平台限制
 
@@ -22,7 +24,7 @@ Canvas Haptics 是一个仅支持 macOS 桌面版 Obsidian 的插件。当 Canva
 <Vault>/.obsidian/plugins/canvas-haptics/
 ```
 
-启用插件后，打开 Canvas 并拖拽节点。也可以在 **设置 → Canvas Haptics → Test feedback** 中测试触觉反馈。
+启用插件后，打开 Canvas 并拖拽节点。可以在 **设置 → Canvas Haptics → Haptic type** 中选择实际使用的触觉类型，并在 **Haptic preview** 区域分别试听三种效果。
 
 ## 开发
 
