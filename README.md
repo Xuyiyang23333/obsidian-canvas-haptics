@@ -10,6 +10,7 @@ A macOS-only Obsidian plugin that gives a subtle trackpad pulse when a Canvas no
 - Compares visible left, center, and right / top, center, and bottom edges.
 - Pulses once when a new alignment is entered.
 - Pulses once when resizing a node reaches another node's width or height.
+- Optionally pulses when the Canvas viewport crosses key zoom levels or fine 10% detents.
 - Offers Generic, Alignment, and Level Change macOS haptic patterns, each with a settings-page preview button.
 - Uses the macOS-provided `osascript` runtime with an embedded AppKit JXA script. The script is released into the plugin folder on first load; no unsigned executable is installed.
 - Supports Apple Silicon macOS only. Mobile support is intentionally out of scope because the feature depends on MacBook trackpad hardware and AppKit haptics.

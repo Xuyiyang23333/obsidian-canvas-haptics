@@ -11,10 +11,14 @@ import hapticScriptAsset from "./haptic.jxa";
 
 const hapticScript = hapticScriptAsset as unknown as string;
 
+type ZoomFeedbackGranularity = "key" | "fine";
+
 interface CanvasHapticsSettings {
   enabled: boolean;
   alignmentFeedback: boolean;
   resizeFeedback: boolean;
+  zoomFeedback: boolean;
+  zoomFeedbackGranularity: ZoomFeedbackGranularity;
   hapticPattern: HapticPattern;
   tolerance: number;
   cooldown: number;
@@ -40,25 +44,37 @@ interface DragState {
   initialHeight: number;
 }
 
+interface ZoomState {
+  detent: number;
+  scale: number;
+}
+
 type HapticPattern = "generic" | "alignment" | "level";
 
 const DEFAULT_SETTINGS: CanvasHapticsSettings = {
   enabled: true,
   alignmentFeedback: true,
   resizeFeedback: true,
+  zoomFeedback: false,
+  zoomFeedbackGranularity: "key",
   hapticPattern: "alignment",
   tolerance: 8,
   cooldown: 120,
 };
 
 const HAPTIC_SCRIPT_FILENAME = "haptic.jxa";
+const KEY_ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const FINE_ZOOM_STEP = 1.1;
 
 class CanvasHapticsPlugin extends Plugin {
   settings: CanvasHapticsSettings = { ...DEFAULT_SETTINGS };
   private activeAlignments = new Set<string>();
   private activeResizeAlignments = new Set<string>();
   private lastFeedbackAt = 0;
+  private lastZoomFeedbackAt = 0;
   private dragState: DragState | null = null;
+  private zoomStates = new WeakMap<Element, ZoomState>();
+  private pendingZoomSamples = new WeakMap<Element, number>();
   private registeredCanvasRoots = new WeakSet<Element>();
   private hapticFailureShown = false;
 
@@ -74,8 +90,9 @@ class CanvasHapticsPlugin extends Plugin {
     this.addSettingTab(new CanvasHapticsSettingTab(this.app, this));
     this.registerDomEvent(document, "pointerdown", (event) => this.onPointerDown(event as PointerEvent), true);
     this.registerDomEvent(document, "pointermove", (event) => this.onPointerMove(event as PointerEvent), true);
-    this.registerDomEvent(document, "pointerup", () => this.endDrag(), true);
+    this.registerDomEvent(document, "pointerup", (event) => this.onPointerUp(event as PointerEvent), true);
     this.registerDomEvent(document, "pointercancel", () => this.endDrag(), true);
+    this.registerDomEvent(document, "wheel", (event) => this.onWheel(event as WheelEvent), true);
 
     this.registerInterval(window.setInterval(() => this.discoverCanvasRoots(), 1500));
     this.discoverCanvasRoots();
@@ -150,6 +167,69 @@ class CanvasHapticsPlugin extends Plugin {
     this.dragState = null;
     this.activeAlignments.clear();
     this.activeResizeAlignments.clear();
+  }
+
+  private onPointerUp(event: PointerEvent): void {
+    this.endDrag();
+    this.scheduleZoomSample(event.target);
+  }
+
+  private onWheel(event: WheelEvent): void {
+    this.scheduleZoomSample(event.target);
+  }
+
+  private scheduleZoomSample(target: EventTarget | null): void {
+    if (!this.settings.enabled || !this.settings.zoomFeedback || !(target instanceof Element)) return;
+    const root = this.findCanvasRoot(target);
+    if (!root || this.pendingZoomSamples.has(root)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      this.pendingZoomSamples.delete(root);
+      this.sampleCanvasZoom(root);
+    });
+    this.pendingZoomSamples.set(root, frame);
+  }
+
+  private sampleCanvasZoom(root: Element): void {
+    const scale = this.readCanvasZoom(root);
+    if (scale === null) return;
+
+    const detent = this.zoomDetent(scale);
+    const previous = this.zoomStates.get(root);
+    this.zoomStates.set(root, { detent, scale });
+    if (!previous || previous.detent === detent) return;
+
+    const now = performance.now();
+    if (now - this.lastZoomFeedbackAt < this.settings.cooldown) return;
+    this.lastZoomFeedbackAt = now;
+    this.performHaptic("generic");
+  }
+
+  private findCanvasRoot(target: Element): Element | null {
+    return target.closest<HTMLElement>(".canvas-wrapper, .canvas");
+  }
+
+  private readCanvasZoom(root: Element): number | null {
+    const reference = root.querySelector<HTMLElement>(".canvas-node");
+    if (reference && reference.offsetWidth > 0 && reference.offsetHeight > 0) {
+      const rect = reference.getBoundingClientRect();
+      const scaleX = rect.width / reference.offsetWidth;
+      const scaleY = rect.height / reference.offsetHeight;
+      const scale = (scaleX + scaleY) / 2;
+      if (Number.isFinite(scale) && scale > 0) return scale;
+    }
+
+    const rawZoom = getComputedStyle(root).getPropertyValue("--zoom-multiplier").trim();
+    const zoom = Number.parseFloat(rawZoom);
+    return Number.isFinite(zoom) && zoom > 0 ? zoom : null;
+  }
+
+  private zoomDetent(scale: number): number {
+    if (this.settings.zoomFeedbackGranularity === "fine") {
+      return Math.floor(Math.log(scale) / Math.log(FINE_ZOOM_STEP));
+    }
+
+    return KEY_ZOOM_LEVELS.filter((level) => scale >= level).length;
   }
 
   private findCanvasNode(event: PointerEvent, allowResizeHitTest: boolean): HTMLElement | null {
@@ -340,6 +420,30 @@ class CanvasHapticsSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.resizeFeedback)
         .onChange(async (value) => {
           this.plugin.settings.resizeFeedback = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Canvas zoom feedback")
+      .setDesc("Pulse when the Canvas view crosses a zoom level. Disabled by default.")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.zoomFeedback)
+        .onChange(async (value) => {
+          this.plugin.settings.zoomFeedback = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Zoom feedback granularity")
+      .setDesc("Use key zoom levels or finer detents of about 10% each.")
+      .addDropdown((dropdown) => dropdown
+        .addOptions({
+          key: "Key levels",
+          fine: "Fine detents (10%)",
+        })
+        .setValue(this.plugin.settings.zoomFeedbackGranularity)
+        .onChange(async (value) => {
+          this.plugin.settings.zoomFeedbackGranularity = value as ZoomFeedbackGranularity;
           await this.plugin.saveSettings();
         }));
 

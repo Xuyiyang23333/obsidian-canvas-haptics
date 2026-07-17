@@ -30,7 +30,7 @@ Use two-space indentation, semicolons, double-quoted strings, and descriptive ca
 
 ## Testing Guidelines
 
-No automated behavior-test framework or coverage requirement is configured. Every behavior change should pass `pnpm check` and receive a manual Obsidian smoke test covering node dragging, horizontal and vertical alignment, node resizing against matching widths and heights, tolerance changes, disabled feedback, helper-file creation, and plugin reload. Confirm that failures are logged without leaving the plugin unusable. Test on supported Apple Silicon macOS because the JXA bridge depends on AppKit haptic APIs; mobile support is intentionally excluded.
+No automated behavior-test framework or coverage requirement is configured. Every behavior change should pass `pnpm check` and receive a manual Obsidian smoke test covering node dragging, horizontal and vertical alignment, node resizing against matching widths and heights, Canvas viewport zoom feedback at key and fine levels, tolerance changes, disabled feedback, helper-file creation, and plugin reload. Confirm that failures are logged without leaving the plugin unusable. Test on supported Apple Silicon macOS because the JXA bridge depends on AppKit haptic APIs; mobile support is intentionally excluded.
 
 ## Commits and Pull Requests
 
